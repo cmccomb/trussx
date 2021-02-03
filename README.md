@@ -13,7 +13,7 @@ cargo install trussx
 Then add it to your ``Cargo.toml` with:
 ```toml
 [dependencies]
-trussx = "0.1.0"
+trussx = "0.1.1"
 ```
 and add this to your root:
 ```rust
@@ -22,6 +22,7 @@ use trussx;
 # Usage
 Here are some basic examples of usage
 ## Building a truss
-Coming soon!
+
+
 ## Analyzing a truss
 Coming soon!

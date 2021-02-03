@@ -111,9 +111,9 @@ impl Truss {
 
 #[cfg(test)]
 mod tests {
+    use crate::*;
     #[test]
     fn it_works() {
-        use crate::*;
         let mut x = Truss::new();
         let a = x.add_joint(0.0, 0.0, 0.0);
         let b = x.add_joint(3.0, 0.0, 0.0);
