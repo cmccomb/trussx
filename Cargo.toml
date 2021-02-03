@@ -1,8 +1,14 @@
 [package]
-name = "truss-rs"
+name = "trussx"
 version = "0.1.0"
 authors = ["Chris McComb <ccmcc2012@gmail.com>"]
+description = "Utilities for designing and analyzing truss structures"
 edition = "2018"
+readme = "README.md"
+repository = "https://github.com/cmccomb/trussx"
+homepage = "https://github.com/cmccomb/trussx"
+documentation = "https://docs.rs/trussx"
+license = "MIT"
 keywords = ["truss", "structural-analysis", "engineering"]
 categories = ["mathematics", "science", "simulation"]
 
