@@ -28,17 +28,21 @@ struct Joint {
     z: f64,
     reaction: Vec<bool>,
     load: Vec<f64>,
+    deflection: Vec<f64>,
 }
 
 struct Member {
     cross_section: StructuralShape,
     elastic_modulus: f64,
     yield_strength: f64,
+    force: f64,
+    stress: f64,
 }
 
 /// This is the truss object that contains all of the necessary information about trusses
 pub struct Truss {
     graph: petgraph::Graph<Joint, Member>,
+    results: bool,
 }
 
 impl Truss {
@@ -46,17 +50,20 @@ impl Truss {
     pub fn new() -> Truss {
         Truss {
             graph: petgraph::Graph::new(),
+            results: false,
         }
     }
 
     /// This function creates a new joint
     pub fn add_joint(&mut self, x: f64, y: f64, z: f64) -> petgraph::graph::NodeIndex {
+        self.clear();
         self.graph.add_node(Joint {
             x,
             y,
             z,
             reaction: vec![false, false, false],
             load: vec![0.0; 3],
+            deflection: vec![0.0; 3],
         })
     }
 
@@ -69,6 +76,7 @@ impl Truss {
         elastic_modulus: f64,
         yield_strength: f64,
     ) -> petgraph::graph::EdgeIndex {
+        self.clear();
         self.graph.add_edge(
             a,
             b,
@@ -76,35 +84,62 @@ impl Truss {
                 cross_section,
                 elastic_modulus,
                 yield_strength,
+                force: 0.0,
+                stress: 0.0,
             },
         )
     }
 
     /// This function moves a joint
-    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex) {
-        unimplemented!()
+    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, x: f64, y: f64, z: f64) {
+        self.clear();
+        let joint = self.graph.node_weight_mut(a).unwrap();
+
+        joint.x = x;
+        joint.y = y;
+        joint.z = z;
     }
 
     /// This function deletes a joint
     pub fn delete_joint(&mut self, a: petgraph::graph::NodeIndex) {
-        unimplemented!()
+        self.clear();
+        self.graph.remove_node(a);
     }
 
     /// This function deletes a member
     pub fn delete_member(&mut self, ab: petgraph::graph::EdgeIndex) {
-        unimplemented!()
+        self.clear();
+        self.graph.remove_edge(a);
+    }
+
+    /// Clear results after a change
+    fn clear(&mut self) {
+        if self.results == true {
+            self.results = false;
+            for mut member in self.graph.edge_weights_mut() {
+                member.force = 0.0;
+                member.stress = 0.0;
+            }
+
+            for mut joint in self.graph.node_weights_mut() {
+                joint.deflection = vec![0.0; 3]
+            }
+        }
     }
 
     fn calculate_member_forces(&mut self) {
+        self.clear();
         unimplemented!()
     }
 
     fn calculate_member_stress(&mut self) {
+        self.clear();
         unimplemented!()
     }
 
     /// This function calculates the forces in each member and outputs a report
     pub fn evaluate(&mut self) {
+        self.results = true;
         unimplemented!()
     }
 }
