@@ -1,6 +1,6 @@
 //! This package provides utilities for designing and analyzing truss structures
 
-use structural_shapes::StructuralShape;
+pub use structural_shapes::StructuralShape;
 
 struct Joint {
     position: [f64; 3],
