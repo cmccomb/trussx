@@ -4,7 +4,7 @@
 #[derive(Clone, Copy)]
 pub enum StructuralShape {
     Pipe {
-        radius: f64,
+        outer_radius: f64,
         thickness: f64,
     },
     IBeam {
@@ -18,6 +18,39 @@ pub enum StructuralShape {
         height: f64,
         thickness: f64,
     },
+}
+
+impl StructuralShape {
+    fn moment_of_inertia(&self) -> f64 {
+        match self {
+            StructuralShape::Pipe { .. } => 0.0,
+            StructuralShape::IBeam { .. } => 0.0,
+            StructuralShape::BoxBeam { .. } => 0.0,
+        }
+    }
+
+    fn area(&self) -> f64 {
+        match *self {
+            StructuralShape::Pipe {
+                outer_radius,
+                thickness,
+            } => {
+                std::f64::consts::PI
+                    * (outer_radius.powf(2.0) - (outer_radius - thickness).powf(2.0))
+            }
+            StructuralShape::IBeam {
+                width,
+                height,
+                web_thickness,
+                flange_thickness,
+            } => width * height - (height - 2.0 * flange_thickness) * (width - web_thickness),
+            StructuralShape::BoxBeam {
+                width,
+                height,
+                thickness,
+            } => width * height - (width - thickness) * (height - thickness),
+        }
+    }
 }
 
 struct Joint {
@@ -79,7 +112,7 @@ impl Truss {
             b,
             Member {
                 cross_section: StructuralShape::Pipe {
-                    radius: 0.0,
+                    outer_radius: 0.0,
                     thickness: 0.0,
                 },
                 elastic_modulus: 0.0,
@@ -197,8 +230,11 @@ impl Truss {
     }
 
     fn calculate_member_forces(&mut self) {
-        self.clear();
-        unimplemented!()
+        let n = self.graph.node_count();
+        let stiffness_matrix = vec![vec![0.0; n * 3]; n * 3];
+        let deflections = vec![vec![0.0; 3]; n];
+        let loads = vec![vec![0.0; 3]; n];
+        unimplemented!();
     }
 
     fn calculate_member_stress(&mut self) {
@@ -218,19 +254,19 @@ mod tests {
     use crate::*;
     #[test]
     fn it_works() {
-        let E = 2000000.0;
-        let Fy = 2000000.0;
+        let elastic_modulus = 2000000.0;
+        let yield_strength = 2000000.0;
 
         let mut x = Truss::new();
         let a = x.add_joint([0.0, 0.0, 0.0]);
         let b = x.add_joint([3.0, 0.0, 0.0]);
         let c = x.add_joint([1.5, 1.5, 0.0]);
-        let ab = x.add_edge(a, b);
-        let bc = x.add_edge(b, c);
-        let ac = x.add_edge(a, c);
-        x.set_material_for_all(E, Fy);
+        let _ab = x.add_edge(a, b);
+        let _bc = x.add_edge(b, c);
+        let _ac = x.add_edge(a, c);
+        x.set_material_for_all(elastic_modulus, yield_strength);
         x.set_shape_for_all(StructuralShape::Pipe {
-            radius: 1.0,
+            outer_radius: 1.0,
             thickness: 0.0,
         })
     }

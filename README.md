@@ -10,7 +10,7 @@ Install through ``crates.io`` with:
 cargo install trussx
 ```
 
-Then add it to your ``Cargo.toml` with:
+Then add it to your `Cargo.toml` with:
 ```toml
 [dependencies]
 trussx = "0.1.1"
