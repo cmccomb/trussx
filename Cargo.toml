@@ -16,3 +16,4 @@ categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
 petgraph = "0.5.1"
+structural-shapes = "0.1.0"
