@@ -13,7 +13,7 @@ cargo install trussx
 Then add it to your `Cargo.toml` with:
 ```toml
 [dependencies]
-trussx = "0.1.1"
+trussx = "0.1.2"
 ```
 and add this to your root:
 ```rust
