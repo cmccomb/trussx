@@ -109,7 +109,7 @@ impl Truss {
     /// This function deletes a member
     pub fn delete_member(&mut self, ab: petgraph::graph::EdgeIndex) {
         self.clear();
-        self.graph.remove_edge(a);
+        self.graph.remove_edge(ab);
     }
 
     /// Clear results after a change
