@@ -1,9 +1,7 @@
 //! This package provides utilities for designing and analyzing truss structures
 
-// We use petgraph to make things easier
-use petgraph::Graph;
-
 /// This enum contains different structural shapes
+#[derive(Clone, Copy)]
 pub enum StructuralShape {
     Pipe {
         radius: f64,
@@ -23,12 +21,10 @@ pub enum StructuralShape {
 }
 
 struct Joint {
-    x: f64,
-    y: f64,
-    z: f64,
-    reaction: Vec<bool>,
-    load: Vec<f64>,
-    deflection: Vec<f64>,
+    position: [f64; 3],
+    reaction: [bool; 3],
+    load: [f64; 3],
+    deflection: [f64; 3],
 }
 
 struct Member {
@@ -45,6 +41,12 @@ pub struct Truss {
     results: bool,
 }
 
+impl Default for Truss {
+    fn default() -> Truss {
+        Truss::new()
+    }
+}
+
 impl Truss {
     /// This function instantiates an empty truss
     pub fn new() -> Truss {
@@ -55,15 +57,13 @@ impl Truss {
     }
 
     /// This function creates a new joint
-    pub fn add_joint(&mut self, x: f64, y: f64, z: f64) -> petgraph::graph::NodeIndex {
+    pub fn add_joint(&mut self, position: [f64; 3]) -> petgraph::graph::NodeIndex {
         self.clear();
         self.graph.add_node(Joint {
-            x,
-            y,
-            z,
-            reaction: vec![false, false, false],
-            load: vec![0.0; 3],
-            deflection: vec![0.0; 3],
+            position,
+            reaction: [false, false, false],
+            load: [0.0; 3],
+            deflection: [0.0; 3],
         })
     }
 
@@ -72,18 +72,18 @@ impl Truss {
         &mut self,
         a: petgraph::graph::NodeIndex,
         b: petgraph::graph::NodeIndex,
-        cross_section: StructuralShape,
-        elastic_modulus: f64,
-        yield_strength: f64,
     ) -> petgraph::graph::EdgeIndex {
         self.clear();
         self.graph.add_edge(
             a,
             b,
             Member {
-                cross_section,
-                elastic_modulus,
-                yield_strength,
+                cross_section: StructuralShape::Pipe {
+                    radius: 0.0,
+                    thickness: 0.0,
+                },
+                elastic_modulus: 0.0,
+                yield_strength: 0.0,
                 force: 0.0,
                 stress: 0.0,
             },
@@ -91,13 +91,17 @@ impl Truss {
     }
 
     /// This function moves a joint
-    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, x: f64, y: f64, z: f64) {
+    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, position: [f64; 3]) {
         self.clear();
-        let joint = self.graph.node_weight_mut(a).unwrap();
-
-        joint.x = x;
-        joint.y = y;
-        joint.z = z;
+        let joint = self.graph.node_weight_mut(a);
+        match joint {
+            None => {
+                panic!("This joint does not exist");
+            }
+            Some(joint) => {
+                joint.position = position;
+            }
+        }
     }
 
     /// This function deletes a joint
@@ -112,9 +116,74 @@ impl Truss {
         self.graph.remove_edge(ab);
     }
 
+    /// Set reaction forces available at each joint
+    pub fn set_reactions(&mut self, a: petgraph::graph::NodeIndex, reaction: [bool; 3]) {
+        self.clear();
+        let joint = self.graph.node_weight_mut(a);
+        match joint {
+            None => {
+                panic!("This joint does not exist");
+            }
+            Some(joint) => {
+                joint.reaction = reaction;
+            }
+        }
+    }
+
+    /// Set material for a member
+    pub fn set_material(
+        &mut self,
+        ab: petgraph::graph::EdgeIndex,
+        elastic_modulus: f64,
+        yield_strength: f64,
+    ) {
+        self.clear();
+        let member = self.graph.edge_weight_mut(ab);
+        match member {
+            None => {
+                panic!("This joint does not exist");
+            }
+            Some(member) => {
+                member.elastic_modulus = elastic_modulus;
+                member.yield_strength = yield_strength;
+            }
+        }
+    }
+
+    /// Set shape for a member
+    pub fn set_shape(&mut self, ab: petgraph::graph::EdgeIndex, shape: StructuralShape) {
+        self.clear();
+        let member = self.graph.edge_weight_mut(ab);
+        match member {
+            None => {
+                panic!("This joint does not exist");
+            }
+            Some(member) => {
+                member.cross_section = shape;
+            }
+        }
+    }
+
+    /// Set material for all members
+    pub fn set_material_for_all(&mut self, elastic_modulus: f64, yield_strength: f64) {
+        self.clear();
+        for mut member in self.graph.edge_weights_mut() {
+            member.elastic_modulus = elastic_modulus;
+            member.yield_strength = yield_strength;
+        }
+    }
+
+    /// Set material for all members
+    pub fn set_shape_for_all(&mut self, shape: StructuralShape) {
+        self.clear();
+        for mut member in self.graph.edge_weights_mut() {
+            member.cross_section = shape;
+        }
+    }
+
     /// Clear results after a change
     fn clear(&mut self) {
-        if self.results == true {
+        if self.results {
             self.results = false;
             for mut member in self.graph.edge_weights_mut() {
                 member.force = 0.0;
@@ -122,7 +191,7 @@ impl Truss {
             }
 
             for mut joint in self.graph.node_weights_mut() {
-                joint.deflection = vec![0.0; 3]
+                joint.deflection = [0.0; 3];
             }
         }
     }
@@ -149,18 +218,20 @@ mod tests {
     use crate::*;
     #[test]
     fn it_works() {
+        let E = 2000000.0;
+        let Fy = 2000000.0;
+
         let mut x = Truss::new();
-        let a = x.add_joint(0.0, 0.0, 0.0);
-        let b = x.add_joint(3.0, 0.0, 0.0);
-        let ab = x.add_edge(
-            a,
-            b,
-            StructuralShape::Pipe {
-                radius: 1.0,
-                thickness: 0.1,
-            },
-            0.0,
-            0.0,
-        );
+        let a = x.add_joint([0.0, 0.0, 0.0]);
+        let b = x.add_joint([3.0, 0.0, 0.0]);
+        let c = x.add_joint([1.5, 1.5, 0.0]);
+        let ab = x.add_edge(a, b);
+        let bc = x.add_edge(b, c);
+        let ac = x.add_edge(a, c);
+        x.set_material_for_all(E, Fy);
+        x.set_shape_for_all(StructuralShape::Pipe {
+            radius: 1.0,
+            thickness: 0.0,
+        })
     }
 }
