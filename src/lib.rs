@@ -1,25 +1,43 @@
+#![warn(clippy::all)]
+#![warn(missing_docs)]
+#![warn(missing_doc_code_examples)]
+#![warn(clippy::missing_docs_in_private_items)]
+
 //! This package provides utilities for designing and analyzing truss structures
 
 pub use structural_shapes::StructuralShape;
 
+/// A joint in the truss
 struct Joint {
+    /// The position of the joint
     position: [f64; 3],
+    /// The reactions applied to the joint
     reaction: [bool; 3],
+    /// The loads applied to the joint
     load: [f64; 3],
+    /// The deflections at
     deflection: [f64; 3],
 }
 
+/// A member in the truss
 struct Member {
+    /// The cross-sectional shape
     cross_section: StructuralShape,
+    /// The elastic modulus
     elastic_modulus: f64,
+    /// The yield strength
     yield_strength: f64,
+    /// The force in the member
     force: f64,
+    /// The stress in the member
     stress: f64,
 }
 
 /// This is the truss object that contains all of the necessary information about trusses
 pub struct Truss {
+    /// A graph structure containing most of the information about the truss
     graph: petgraph::Graph<Joint, Member>,
+    /// A bool indicating whether or not results are current
     results: bool,
 }
 
