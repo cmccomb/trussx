@@ -8,6 +8,7 @@
 pub use structural_shapes::StructuralShape;
 
 /// A joint in the truss
+#[derive(Clone, Copy, Debug)]
 struct Joint {
     /// The position of the joint
     position: [f64; 3],
@@ -20,6 +21,7 @@ struct Joint {
 }
 
 /// A member in the truss
+#[derive(Clone, Copy, Debug)]
 struct Member {
     /// The cross-sectional shape
     cross_section: StructuralShape,
@@ -34,6 +36,7 @@ struct Member {
 }
 
 /// This is the truss object that contains all of the necessary information about trusses
+#[derive(Clone, Debug)]
 pub struct Truss {
     /// A graph structure containing most of the information about the truss
     graph: petgraph::Graph<Joint, Member>,
