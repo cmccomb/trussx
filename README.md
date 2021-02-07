@@ -10,10 +10,13 @@ Here are some basic examples of usage
 For example, you can build a truss with something like:
 ```rust
 fn main() {
-    let x = trussx::Truss::new();
-    let a = x.add_joint(0.0, 0.0, 0.0);
-    let b = x.add_joint(3.0, 0.0, 0.0);
-    let ab = x.add_edge(a, b);
+    let mut x = Truss::new();
+    let a = x.add_joint([0.0, 0.0, 0.0]);
+    let b = x.add_joint([3.0, 0.0, 0.0]);
+    let c = x.add_joint([1.5, 1.5, 0.0]);
+    let _ab = x.add_edge(a, b);
+    let _bc = x.add_edge(b, c);
+    let _ac = x.add_edge(a, c);
 }
 ```
 

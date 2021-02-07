@@ -21,6 +21,17 @@ struct Joint {
     deflection: [f64; 3],
 }
 
+impl Default for Joint {
+    fn default() -> Self {
+        Joint {
+            position: [0.0; 3],
+            reaction: [false, false, false],
+            load: [0.0; 3],
+            deflection: [0.0; 3],
+        }
+    }
+}
+
 /// A member in the truss
 #[derive(Clone, Copy, Debug)]
 struct Member {
@@ -36,6 +47,22 @@ struct Member {
     stress: f64,
     /// The factor of safety for the member
     fos: f64,
+}
+
+impl Default for Member {
+    fn default() -> Self {
+        Member {
+            cross_section: StructuralShape::Pipe {
+                outer_radius: 0.0,
+                thickness: 0.0,
+            },
+            elastic_modulus: 0.0,
+            yield_strength: 0.0,
+            force: 0.0,
+            stress: 0.0,
+            fos: 0.0,
+        }
+    }
 }
 
 /// This is the truss object that contains all of the necessary information about trusses
@@ -65,12 +92,9 @@ impl Truss {
     /// This function creates a new joint
     pub fn add_joint(&mut self, position: [f64; 3]) -> petgraph::graph::NodeIndex {
         self.clear();
-        self.graph.add_node(Joint {
-            position,
-            reaction: [false, false, false],
-            load: [0.0; 3],
-            deflection: [0.0; 3],
-        })
+        let mut j = Joint::default();
+        j.position = position;
+        self.graph.add_node(j)
     }
 
     /// This function creates a new member to connect two joints
@@ -80,21 +104,7 @@ impl Truss {
         b: petgraph::graph::NodeIndex,
     ) -> petgraph::graph::EdgeIndex {
         self.clear();
-        self.graph.add_edge(
-            a,
-            b,
-            Member {
-                cross_section: StructuralShape::Pipe {
-                    outer_radius: 0.0,
-                    thickness: 0.0,
-                },
-                elastic_modulus: 0.0,
-                yield_strength: 0.0,
-                force: 0.0,
-                stress: 0.0,
-                fos: 0.0,
-            },
-        )
+        self.graph.add_edge(a, b, Member::default())
     }
 
     /// This function moves a joint
