@@ -5,6 +5,7 @@
 
 //! This package provides utilities for designing and analyzing truss structures
 
+use ndarray::Array2;
 pub use structural_shapes::StructuralShape;
 
 /// A joint in the truss
@@ -33,6 +34,8 @@ struct Member {
     force: f64,
     /// The stress in the member
     stress: f64,
+    /// The factor of safety for the member
+    fos: f64,
 }
 
 /// This is the truss object that contains all of the necessary information about trusses
@@ -89,6 +92,7 @@ impl Truss {
                 yield_strength: 0.0,
                 force: 0.0,
                 stress: 0.0,
+                fos: 0.0,
             },
         )
     }
@@ -199,23 +203,58 @@ impl Truss {
         }
     }
 
+    /// Calculate forces in the members
     fn calculate_member_forces(&mut self) {
         let n = self.graph.node_count();
-        let stiffness_matrix = vec![vec![0.0; n * 3]; n * 3];
-        let deflections = vec![vec![0.0; 3]; n];
-        let loads = vec![vec![0.0; 3]; n];
+        let _stiffness_matrix = Array2::<f64>::zeros((n * 3, n * 3));
+        let _deflections = Array2::<f64>::zeros((3, n));
+        let _loads = Array2::<f64>::zeros((3, n));
         unimplemented!();
     }
 
+    /// Calculate member stresses from forces
     fn calculate_member_stress(&mut self) {
-        self.clear();
-        unimplemented!()
+        for mut member in self.graph.edge_weights_mut() {
+            member.stress = member.force / member.cross_section.area();
+            member.fos = member.yield_strength / member.stress;
+        }
     }
 
     /// This function calculates the forces in each member and outputs a report
     pub fn evaluate(&mut self) {
         self.results = true;
-        unimplemented!()
+        self.calculate_member_forces();
+        self.calculate_member_stress();
+    }
+
+    /// Find the member with minimum fos
+    pub fn min_fos_member(&mut self) -> petgraph::graph::EdgeIndex {
+        let mut fos: f64;
+        let mut min_fos: f64 = std::f64::INFINITY;
+        let mut min_fos_member = petgraph::graph::EdgeIndex::default();
+        for member in self.graph.edge_indices() {
+            fos = self.graph.edge_weight(member).unwrap().fos.abs();
+            if fos < min_fos {
+                min_fos_member = member;
+                min_fos = fos;
+            }
+        }
+        min_fos_member
+    }
+
+    /// Find the member with maximum stress
+    pub fn max_stress_member(&mut self) -> petgraph::graph::EdgeIndex {
+        let mut stress: f64;
+        let mut max_stress: f64 = 0.0;
+        let mut max_stress_member = petgraph::graph::EdgeIndex::default();
+        for member in self.graph.edge_indices() {
+            stress = self.graph.edge_weight(member).unwrap().stress.abs();
+            if stress > max_stress {
+                max_stress_member = member;
+                max_stress = stress;
+            }
+        }
+        max_stress_member
     }
 }
 
