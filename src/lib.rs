@@ -6,10 +6,12 @@
 //! This package provides utilities for designing and analyzing truss structures
 
 use ndarray::Array2;
+use serde::{Deserialize, Serialize};
+use std::fmt;
 pub use structural_shapes::StructuralShape;
 
 /// A joint in the truss
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
 struct Joint {
     /// The position of the joint
     position: [f64; 3],
@@ -22,7 +24,7 @@ struct Joint {
 }
 
 impl Default for Joint {
-    fn default() -> Self {
+    fn default() -> Joint {
         Joint {
             position: [0.0; 3],
             reaction: [false, false, false],
@@ -50,7 +52,7 @@ struct Member {
 }
 
 impl Default for Member {
-    fn default() -> Self {
+    fn default() -> Member {
         Member {
             cross_section: StructuralShape::Pipe {
                 outer_radius: 0.0,
@@ -92,9 +94,10 @@ impl Truss {
     /// This function creates a new joint
     pub fn add_joint(&mut self, position: [f64; 3]) -> petgraph::graph::NodeIndex {
         self.clear();
-        let mut j = Joint::default();
-        j.position = position;
-        self.graph.add_node(j)
+        self.graph.add_node(Joint {
+            position,
+            ..Joint::default()
+        })
     }
 
     /// This function creates a new member to connect two joints
@@ -216,10 +219,126 @@ impl Truss {
     /// Calculate forces in the members
     fn calculate_member_forces(&mut self) {
         let n = self.graph.node_count();
+
+        // Initialize some stuff
         let _stiffness_matrix = Array2::<f64>::zeros((n * 3, n * 3));
-        let _deflections = Array2::<f64>::zeros((3, n));
-        let _loads = Array2::<f64>::zeros((3, n));
-        unimplemented!();
+        let mut deflections = Array2::<bool>::from_elem((3, n), false);
+        let mut loads = Array2::<f64>::zeros((3, n));
+
+        // Fill some stuff up
+        for (idx, member) in self.graph.node_indices().enumerate() {
+            let node_reactions = self.graph.node_weight_mut(member).unwrap().reaction;
+            let node_loads = self.graph.node_weight_mut(member).unwrap().load;
+            for jdx in 1..3 {
+                deflections[[jdx, idx]] = !node_reactions[jdx];
+                loads[[jdx, idx]] = node_loads[jdx];
+            }
+        }
+
+        // Find out which joints can deflect
+        let mut ff: Vec<usize> = vec![0; 0];
+        let mut ff_load: Vec<f64> = vec![0.0; 0];
+        let mut counter: usize = 0;
+        for i in 0..n {
+            for j in 0..3 {
+                if deflections[[j, i]] {
+                    ff.push(counter);
+                    ff_load.push(loads[[j, i]])
+                }
+                counter += 1;
+            }
+        }
+
+        // Build the global stiffess matrix
+        // int idx1, idx2, key1, key2;
+        // long double ux, uy, uz;
+        // std::vector<int> ee(6, 0);
+        // std::vector<long double> uu(6, 0.0);
+        // for (std::map<int, Edge>::iterator it = edges.begin(); it != edges.end(); it++) {
+        //     int k = (it->first);
+        //     key1 = edges[k].initial_node;
+        //     key2 = edges[k].terminal_node;
+        //     idx1 = node_id_map[key1];
+        //     idx2 = node_id_map[key2];
+        //     ux = (nodes[key1].parameters["x"] - nodes[key2].parameters["x"]) / edges[k].parameters["L"];
+        //     uy = (nodes[key1].parameters["y"] - nodes[key2].parameters["y"]) / edges[k].parameters["L"];
+        //     uz = (nodes[key1].parameters["z"] - nodes[key2].parameters["z"]) / edges[k].parameters["L"];
+        //     long double EAL = E * edges[k].parameters["A"] / edges[k].parameters["L"];
+        //     edges[k].parameters["kx"] = EAL*ux;
+        //     edges[k].parameters["ky"] = EAL*uy;
+        //     edges[k].parameters["kz"] = EAL*uz;
+        //     uu = {ux, uy, uz, -ux, -uy, -uz};
+        //     ee = {3 * idx1, 3 * idx1 + 1, 3 * idx1 + 2, 3 * idx2, 3 * idx2 + 1, 3 * idx2 + 2};
+        //     for (int i = 0; i < 6; i++) {
+        //         for (int j = 0; j < 6; j++) {
+        //             K[ee[i]][ee[j]] += EAL * uu[i] * uu[j];
+        //         }
+        //     }
+        // }
+
+        // Solve for displacements
+        // int ffs = static_cast<int>(ff.size());
+        // std::vector<std::vector<long double> > Kff(ff.size(), std::vector<long double>(ff.size() + 1, 0.0));
+        // for (int i = 0; i < ffs; i++) {
+        //     for (int j = 0; j < ffs; j++) {
+        //         Kff[i][j] = K[ff[i]][ff[j]];
+        //     }
+        //     Kff[i][ffs] = loads_ff[i];
+        // }
+        //
+        // std::vector<long double> deflections_compact = gauss(Kff);
+        //
+        // // Compute the condition number
+        // for(int i=0; i<ffs; i++){
+        //     Kff[i][ffs] = deflections_compact[i];
+        // }
+        // std::vector<long double> backed_out_loads = matrix_vector_mult(Kff);
+        // cond = 0;
+        // for(int i=0; i<ffs; i++){
+        //     cond += std::abs(loads_ff[i] - backed_out_loads[i]);
+        // }
+        //
+        //
+        // // Fit the compacted deflection matrix back into the original
+        // counter = 0;
+        // for (int i = 0; i < number_of_nodes; i++) {
+        //     for (int j = 0; j < 3; j++) {
+        //         if (deflections[j][i] == 1) {
+        //             deflections[j][i] = deflections_compact[counter];
+        //             counter++;
+        //         }
+        //     }
+        // }
+        //
+        // // From displacements, solve for forces
+        // for (std::map<int, Edge>::iterator it = edges.begin(); it != edges.end(); it++) {
+        //     // Define a few things
+        //     int k = (it->first);
+        //     idx1 = node_id_map[edges[k].initial_node];
+        //     idx2 = node_id_map[edges[k].terminal_node];
+        //
+        //     // Define the force
+        //     edges[k].parameters["F"] =   edges[k].parameters["kx"] * (deflections[0][idx1] - deflections[0][idx2])
+        //                                + edges[k].parameters["ky"] * (deflections[1][idx1] - deflections[1][idx2])
+        //                                + edges[k].parameters["kz"] * (deflections[2][idx1] - deflections[2][idx2]);
+        //
+        //     // Calculate factor of safety against yielding
+        //     edges[k].parameters["FOS_y"] = std::abs((Fy*edges[k].parameters["A"])/edges[k].parameters["F"]);
+        //
+        //     // Calculate factor of safety against buckling
+        //     if (edges[k].parameters["F"] < 0) {
+        //         edges[k].parameters["FOS_b"] = -(std::pow(M_PI, 2) * E * edges[k].parameters["I"]/std::pow(edges[k].parameters["L"], 2))/edges[k].parameters["F"];
+        //     } else {
+        //         edges[k].parameters["FOS_b"] = 1000;
+        //     }
+        //
+        //     // Save the limiting factor of safety
+        //     if(edges[k].parameters["FOS_b"] < edges[k].parameters["FOS_y"]){
+        //         edges[k].parameters["FOS_lim"] = edges[k].parameters["FOS_b"];
+        //     } else {
+        //         edges[k].parameters["FOS_lim"] = edges[k].parameters["FOS_y"];
+        //     }
+        // }
     }
 
     /// Calculate member stresses from forces
@@ -265,6 +384,18 @@ impl Truss {
             }
         }
         max_stress_member
+    }
+}
+
+impl fmt::Display for Truss {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut joints = vec![Joint::default(); 0];
+        for joint in self.graph.node_indices() {
+            joints.push(*self.graph.node_weight(joint).unwrap());
+        }
+        let json = serde_json::to_string_pretty(&joints).unwrap();
+        writeln!(f, "{}", json);
+        Ok(())
     }
 }
 
