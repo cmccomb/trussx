@@ -356,6 +356,15 @@ impl Truss {
         self.calculate_member_stress();
     }
 
+    /// Get FOS for all members in truss
+    pub fn get_fos(&mut self) -> Vec<(petgraph::graph::EdgeIndex, f64)> {
+        let mut fos = vec![];
+        for member in self.graph.edge_indices() {
+            fos.push((member, self.graph.edge_weight(member).unwrap().fos.abs()));
+        }
+        fos
+    }
+
     /// Find the member with minimum fos
     pub fn min_fos_member(&mut self) -> petgraph::graph::EdgeIndex {
         let mut fos: f64;
