@@ -136,7 +136,7 @@ impl Truss {
         self.graph.remove_edge(ab);
     }
 
-    /// Set reaction forces available at each joint
+    /// Set reaction forces available at a joint
     pub fn set_reactions(&mut self, a: petgraph::graph::NodeIndex, reaction: [bool; 3]) {
         self.clear();
         let joint = self.graph.node_weight_mut(a);
@@ -146,6 +146,20 @@ impl Truss {
             }
             Some(joint) => {
                 joint.reaction = reaction;
+            }
+        }
+    }
+
+    /// Set loads at a joint
+    pub fn set_loads(&mut self, a: petgraph::graph::NodeIndex, load: [f64; 3]) {
+        self.clear();
+        let joint = self.graph.node_weight_mut(a);
+        match joint {
+            None => {
+                panic!("This joint does not exist");
+            }
+            Some(joint) => {
+                joint.load = load;
             }
         }
     }
