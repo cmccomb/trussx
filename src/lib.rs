@@ -372,10 +372,19 @@ impl Truss {
     }
 
     /// Get FOS for all members in truss
-    pub fn get_fos(&mut self) -> Vec<(petgraph::graph::EdgeIndex, f64)> {
+    pub fn get_fos_tuple(&mut self) -> Vec<(petgraph::graph::EdgeIndex, f64)> {
         let mut fos = vec![];
         for member in self.graph.edge_indices() {
             fos.push((member, self.graph.edge_weight(member).unwrap().fos.abs()));
+        }
+        fos
+    }
+
+    /// Get FOS for all members in truss
+    pub fn get_fos(&mut self) -> Vec<f64> {
+        let mut fos = vec![];
+        for member in self.graph.edge_indices() {
+            fos.push(self.graph.edge_weight(member).unwrap().fos.abs());
         }
         fos
     }
