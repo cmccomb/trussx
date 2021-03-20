@@ -16,7 +16,7 @@ categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
 petgraph = "0.5.1"
-structural-shapes = "0.1.5"
+structural-shapes = "0.2.1"
 ndarray = "0.14.0"
 serde_json = "1.0.62"
 serde = {version = "1.0.123", features = ["derive"] }

@@ -57,6 +57,7 @@ impl Default for Member {
             cross_section: StructuralShape::Pipe {
                 outer_radius: 0.0,
                 thickness: 0.0,
+                center_of_gravity: (0.0, 0.0),
             },
             elastic_modulus: 0.0,
             yield_strength: 0.0,
@@ -441,6 +442,7 @@ mod tests {
         x.set_shape_for_all(StructuralShape::Pipe {
             outer_radius: 1.0,
             thickness: 0.0,
+            center_of_gravity: (0.0, 0.0),
         })
     }
 }
