@@ -8,28 +8,35 @@
 use ndarray::Array2;
 use serde::{Deserialize, Serialize};
 use std::fmt;
-pub use structural_shapes::StructuralShape;
+pub use structural_shapes::{StructuralShape, length};
+use uom::si::f64::{Length, Force, Acceleration, Pressure, Ratio};
+use uom::si::force::newton;
+use uom::si::length::meter;
+use uom::si::pressure::pascal;
+use uom::si::ratio::ratio;
+use num::{Float, NumCast};
+
 
 /// A joint in the truss
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug)]
 struct Joint {
     /// The position of the joint
-    position: [f64; 3],
+    position: [Length; 3],
     /// The reactions applied to the joint
     reaction: [bool; 3],
     /// The loads applied to the joint
-    load: [f64; 3],
+    load: [Force; 3],
     /// The deflections at
-    deflection: [f64; 3],
+    deflection: [Length; 3],
 }
 
 impl Default for Joint {
     fn default() -> Joint {
         Joint {
-            position: [0.0; 3],
+            position: [Length::new::<meter>(0.0); 3],
             reaction: [false, false, false],
-            load: [0.0; 3],
-            deflection: [0.0; 3],
+            load: [Force::new::<newton>(0.0); 3],
+            deflection: [Length::new::<meter>(0.0); 3],
         }
     }
 }
@@ -40,30 +47,30 @@ struct Member {
     /// The cross-sectional shape
     cross_section: StructuralShape,
     /// The elastic modulus
-    elastic_modulus: f64,
+    elastic_modulus: Pressure,
     /// The yield strength
-    yield_strength: f64,
+    yield_strength: Pressure,
     /// The force in the member
-    force: f64,
+    force: Force,
     /// The stress in the member
-    stress: f64,
+    stress: Pressure,
     /// The factor of safety for the member
-    fos: f64,
+    fos: Ratio,
 }
 
 impl Default for Member {
     fn default() -> Member {
         Member {
             cross_section: StructuralShape::Pipe {
-                outer_radius: 0.0,
-                thickness: 0.0,
-                center_of_gravity: (0.0, 0.0),
+                outer_radius: Length::new::<meter>(0.0),
+                thickness: Length::new::<meter>(0.0),
+                center_of_gravity: (Length::new::<meter>(0.0), Length::new::<meter>(0.0)),
             },
-            elastic_modulus: 0.0,
-            yield_strength: 0.0,
-            force: 0.0,
-            stress: 0.0,
-            fos: 0.0,
+            elastic_modulus: Pressure::new::<pascal>(0.0),
+            yield_strength: Pressure::new::<pascal>(0.0),
+            force: Force::new::<newton>(0.0),
+            stress: Pressure::new::<pascal>(0.0),
+            fos: Ratio::new::<ratio>(0.0),
         }
     }
 }
@@ -93,7 +100,7 @@ impl Truss {
     }
 
     /// This function creates a new joint
-    pub fn add_joint(&mut self, position: [f64; 3]) -> petgraph::graph::NodeIndex {
+    pub fn add_joint(&mut self, position: [Length; 3]) -> petgraph::graph::NodeIndex {
         self.clear();
         self.graph.add_node(Joint {
             position,
@@ -112,7 +119,7 @@ impl Truss {
     }
 
     /// This function moves a joint
-    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, position: [f64; 3]) {
+    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, position: [Length; 3]) {
         self.clear();
         let joint = self.graph.node_weight_mut(a);
         match joint {
@@ -152,7 +159,7 @@ impl Truss {
     }
 
     /// Set loads at a joint
-    pub fn set_loads(&mut self, a: petgraph::graph::NodeIndex, load: [f64; 3]) {
+    pub fn set_loads(&mut self, a: petgraph::graph::NodeIndex, load: [Force; 3]) {
         self.clear();
         let joint = self.graph.node_weight_mut(a);
         match joint {
@@ -169,8 +176,8 @@ impl Truss {
     pub fn set_material(
         &mut self,
         ab: petgraph::graph::EdgeIndex,
-        elastic_modulus: f64,
-        yield_strength: f64,
+        elastic_modulus: Pressure,
+        yield_strength: Pressure,
     ) {
         self.clear();
         let member = self.graph.edge_weight_mut(ab);
@@ -200,7 +207,7 @@ impl Truss {
     }
 
     /// Set material for all members
-    pub fn set_material_for_all(&mut self, elastic_modulus: f64, yield_strength: f64) {
+    pub fn set_material_for_all(&mut self, elastic_modulus: Pressure, yield_strength: Pressure) {
         self.clear();
         for mut member in self.graph.edge_weights_mut() {
             member.elastic_modulus = elastic_modulus;
@@ -221,12 +228,12 @@ impl Truss {
         if self.results {
             self.results = false;
             for mut member in self.graph.edge_weights_mut() {
-                member.force = 0.0;
-                member.stress = 0.0;
+                member.force = Force::new::<newton>(0.0);
+                member.stress = Pressure::new::<pascal>(0.0);
             }
 
             for mut joint in self.graph.node_weights_mut() {
-                joint.deflection = [0.0; 3];
+                joint.deflection = [Length::new::<meter>(0.0); 3];
             }
         }
     }
@@ -238,7 +245,7 @@ impl Truss {
         // Initialize some stuff
         let _stiffness_matrix = Array2::<f64>::zeros((n * 3, n * 3));
         let mut deflections = Array2::<bool>::from_elem((3, n), false);
-        let mut loads = Array2::<f64>::zeros((3, n));
+        let mut loads = Array2::<Force>::zeros((3, n));
 
         // Fill some stuff up
         for (idx, member) in self.graph.node_indices().enumerate() {
@@ -252,7 +259,7 @@ impl Truss {
 
         // Find out which joints can deflect
         let mut ff: Vec<usize> = vec![0; 0];
-        let mut ff_load: Vec<f64> = vec![0.0; 0];
+        let mut ff_load: Vec<Force> = vec![Force::new::<newton>(0.0); 0];
         let mut counter: usize = 0;
         for i in 0..n {
             for j in 0..3 {
@@ -372,7 +379,7 @@ impl Truss {
     }
 
     /// Get FOS for all members in truss
-    pub fn get_fos_tuple(&mut self) -> Vec<(petgraph::graph::EdgeIndex, f64)> {
+    pub fn get_fos_tuple(&mut self) -> Vec<(petgraph::graph::EdgeIndex, Ratio)> {
         let mut fos = vec![];
         for member in self.graph.edge_indices() {
             fos.push((member, self.graph.edge_weight(member).unwrap().fos.abs()));
@@ -381,7 +388,7 @@ impl Truss {
     }
 
     /// Get FOS for all members in truss
-    pub fn get_fos(&mut self) -> Vec<f64> {
+    pub fn get_fos(&mut self) -> Vec<Ratio> {
         let mut fos = vec![];
         for member in self.graph.edge_indices() {
             fos.push(self.graph.edge_weight(member).unwrap().fos.abs());
@@ -391,8 +398,8 @@ impl Truss {
 
     /// Find the member with minimum fos
     pub fn min_fos_member(&mut self) -> petgraph::graph::EdgeIndex {
-        let mut fos: f64;
-        let mut min_fos: f64 = std::f64::INFINITY;
+        let mut fos: Ratio;
+        let mut min_fos = Ratio::new::<ratio>(f64::INFINITY);
         let mut min_fos_member = petgraph::graph::EdgeIndex::default();
         for member in self.graph.edge_indices() {
             fos = self.graph.edge_weight(member).unwrap().fos.abs();
@@ -406,8 +413,8 @@ impl Truss {
 
     /// Find the member with maximum stress
     pub fn max_stress_member(&mut self) -> petgraph::graph::EdgeIndex {
-        let mut stress: f64;
-        let mut max_stress: f64 = 0.0;
+        let mut stress: Pressure;
+        let mut max_stress = Pressure::new::<pascal>(0.0);
         let mut max_stress_member = petgraph::graph::EdgeIndex::default();
         for member in self.graph.edge_indices() {
             stress = self.graph.edge_weight(member).unwrap().stress.abs();
@@ -420,38 +427,32 @@ impl Truss {
     }
 }
 
-impl fmt::Display for Truss {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let mut joints = vec![Joint::default(); 0];
-        for joint in self.graph.node_indices() {
-            joints.push(*self.graph.node_weight(joint).unwrap());
-        }
-        let json = serde_json::to_string_pretty(&joints).unwrap();
-        writeln!(f, "{}", json);
-        Ok(())
-    }
+/// A helper function supporting conversion of floating point points to length tuples
+pub fn point<T: Float>(p0: T, p1: T, p2: T) -> [Length; 3] {
+    [
+        Length::new::<meter>(NumCast::from(p0).expect("The input must be castable to a float.")),
+        Length::new::<meter>(NumCast::from(p1).expect("The input must be castable to a float.")),
+        Length::new::<meter>(NumCast::from(p2).expect("The input must be castable to a float.")),
+    ]
 }
 
 #[cfg(test)]
 mod tests {
     use crate::*;
+    use uom::si::f64::Pressure;
+    use uom::si::pressure::pascal;
     #[test]
     fn it_works() {
-        let elastic_modulus = 2000000.0;
-        let yield_strength = 2000000.0;
+        let elastic_modulus = Pressure::new::<pascal>(2000000.0);
+        let yield_strength = Pressure::new::<pascal>(2000000.0);
 
         let mut x = Truss::new();
-        let a = x.add_joint([0.0, 0.0, 0.0]);
-        let b = x.add_joint([3.0, 0.0, 0.0]);
-        let c = x.add_joint([1.5, 1.5, 0.0]);
+        let a = x.add_joint(point(0.0, 0.0, 0.0));
+        let b = x.add_joint(point(3.0, 0.0, 0.0));
+        let c = x.add_joint(point(1.5, 1.5, 0.0));
         let _ab = x.add_edge(a, b);
         let _bc = x.add_edge(b, c);
         let _ac = x.add_edge(a, c);
         x.set_material_for_all(elastic_modulus, yield_strength);
-        x.set_shape_for_all(StructuralShape::Pipe {
-            outer_radius: 1.0,
-            thickness: 0.0,
-            center_of_gravity: (0.0, 0.0),
-        })
     }
 }

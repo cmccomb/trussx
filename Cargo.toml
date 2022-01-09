@@ -1,6 +1,6 @@
 [package]
 name = "trussx"
-version = "0.1.3"
+version = "0.1.4"
 authors = ["Chris McComb <ccmcc2012@gmail.com>"]
 description = "Utilities for designing and analyzing truss structures"
 edition = "2018"
@@ -16,7 +16,9 @@ categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
 petgraph = "0.5.1"
-structural-shapes = "0.2.1"
+structural-shapes = "0.2.2"
 ndarray = "0.14.0"
 serde_json = "1.0.62"
 serde = {version = "1.0.123", features = ["derive"] }
+uom = "0.31.1"
+num = "0.4.0"
