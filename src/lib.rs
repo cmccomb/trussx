@@ -1,15 +1,12 @@
 #![warn(clippy::all)]
 #![warn(missing_docs)]
-#![warn(missing_doc_code_examples)]
+#![warn(rustdoc::missing_doc_code_examples)]
 #![warn(clippy::missing_docs_in_private_items)]
-
-//! This package provides utilities for designing and analyzing truss structures
+#![doc = include_str!("../README.md")]
 
 use ndarray::Array2;
-use serde::{Deserialize, Serialize};
-use std::fmt;
 pub use structural_shapes::{StructuralShape, length};
-use uom::si::f64::{Length, Force, Acceleration, Pressure, Ratio};
+use uom::si::f64::{Length, Force, Pressure, Ratio};
 use uom::si::force::newton;
 use uom::si::length::meter;
 use uom::si::pressure::pascal;
