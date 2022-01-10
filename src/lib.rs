@@ -5,14 +5,14 @@
 #![doc = include_str!("../README.md")]
 
 use ndarray::Array2;
-pub use structural_shapes::{StructuralShape, length};
-use uom::si::f64::{Length, Force, Pressure, Ratio};
-use uom::si::force::newton;
-use uom::si::length::meter;
-use uom::si::pressure::pascal;
-use uom::si::ratio::ratio;
-use num::{Float, NumCast};
-
+pub use structural_shapes::StructuralShape;
+use uom::si::{
+    f64::{Force, Length, Pressure, Ratio},
+    force::newton,
+    length::{meter, Conversion as LengthConversion, Unit as LengthUnit},
+    pressure::{pascal, Conversion as PressureConversion, Unit as PressureUnit},
+    ratio::ratio,
+};
 
 /// A joint in the truss
 #[derive(Clone, Copy, Debug)]
@@ -97,10 +97,19 @@ impl Truss {
     }
 
     /// This function creates a new joint
-    pub fn add_joint(&mut self, position: [Length; 3]) -> petgraph::graph::NodeIndex {
+    pub fn add_joint<T: LengthUnit + LengthConversion<f64>>(
+        &mut self,
+        x: f64,
+        y: f64,
+        z: f64,
+    ) -> petgraph::graph::NodeIndex {
         self.clear();
         self.graph.add_node(Joint {
-            position,
+            position: [
+                Length::new::<T>(x),
+                Length::new::<T>(y),
+                Length::new::<T>(z),
+            ],
             ..Joint::default()
         })
     }
@@ -116,7 +125,13 @@ impl Truss {
     }
 
     /// This function moves a joint
-    pub fn move_joint(&mut self, a: petgraph::graph::NodeIndex, position: [Length; 3]) {
+    pub fn move_joint<T: LengthUnit + LengthConversion<f64>>(
+        &mut self,
+        a: petgraph::graph::NodeIndex,
+        x: f64,
+        y: f64,
+        z: f64,
+    ) {
         self.clear();
         let joint = self.graph.node_weight_mut(a);
         match joint {
@@ -124,7 +139,11 @@ impl Truss {
                 panic!("This joint does not exist");
             }
             Some(joint) => {
-                joint.position = position;
+                joint.position = [
+                    Length::new::<T>(x),
+                    Length::new::<T>(y),
+                    Length::new::<T>(z),
+                ];
             }
         }
     }
@@ -170,11 +189,11 @@ impl Truss {
     }
 
     /// Set material for a member
-    pub fn set_material(
+    pub fn set_material<T: PressureUnit + PressureConversion<f64>>(
         &mut self,
         ab: petgraph::graph::EdgeIndex,
-        elastic_modulus: Pressure,
-        yield_strength: Pressure,
+        elastic_modulus: f64,
+        yield_strength: f64,
     ) {
         self.clear();
         let member = self.graph.edge_weight_mut(ab);
@@ -183,8 +202,8 @@ impl Truss {
                 panic!("This joint does not exist");
             }
             Some(member) => {
-                member.elastic_modulus = elastic_modulus;
-                member.yield_strength = yield_strength;
+                member.elastic_modulus = Pressure::new::<T>(elastic_modulus);
+                member.yield_strength = Pressure::new::<T>(yield_strength);
             }
         }
     }
@@ -204,11 +223,15 @@ impl Truss {
     }
 
     /// Set material for all members
-    pub fn set_material_for_all(&mut self, elastic_modulus: Pressure, yield_strength: Pressure) {
+    pub fn set_material_for_all<T: PressureUnit + PressureConversion<f64>>(
+        &mut self,
+        elastic_modulus: f64,
+        yield_strength: f64,
+    ) {
         self.clear();
         for mut member in self.graph.edge_weights_mut() {
-            member.elastic_modulus = elastic_modulus;
-            member.yield_strength = yield_strength;
+            member.elastic_modulus = Pressure::new::<T>(elastic_modulus);
+            member.yield_strength = Pressure::new::<T>(yield_strength);
         }
     }
 
@@ -424,32 +447,21 @@ impl Truss {
     }
 }
 
-/// A helper function supporting conversion of floating point points to length tuples
-pub fn point<T: Float>(p0: T, p1: T, p2: T) -> [Length; 3] {
-    [
-        Length::new::<meter>(NumCast::from(p0).expect("The input must be castable to a float.")),
-        Length::new::<meter>(NumCast::from(p1).expect("The input must be castable to a float.")),
-        Length::new::<meter>(NumCast::from(p2).expect("The input must be castable to a float.")),
-    ]
-}
-
 #[cfg(test)]
 mod tests {
     use crate::*;
-    use uom::si::f64::Pressure;
-    use uom::si::pressure::pascal;
+    use uom::si::length::meter;
+    use uom::si::pressure::gigapascal;
+
     #[test]
     fn it_works() {
-        let elastic_modulus = Pressure::new::<pascal>(2000000.0);
-        let yield_strength = Pressure::new::<pascal>(2000000.0);
-
         let mut x = Truss::new();
-        let a = x.add_joint(point(0.0, 0.0, 0.0));
-        let b = x.add_joint(point(3.0, 0.0, 0.0));
-        let c = x.add_joint(point(1.5, 1.5, 0.0));
+        let a = x.add_joint::<meter>(0.0, 0.0, 0.0);
+        let b = x.add_joint::<meter>(3.0, 0.0, 0.0);
+        let c = x.add_joint::<meter>(1.5, 1.5, 0.0);
         let _ab = x.add_edge(a, b);
         let _bc = x.add_edge(b, c);
         let _ac = x.add_edge(a, c);
-        x.set_material_for_all(elastic_modulus, yield_strength);
+        x.set_material_for_all::<gigapascal>(125.0, 25.0);
     }
 }
