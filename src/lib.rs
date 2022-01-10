@@ -99,16 +99,14 @@ impl Truss {
     /// This function creates a new joint
     pub fn add_joint<T: LengthUnit + LengthConversion<f64>>(
         &mut self,
-        x: f64,
-        y: f64,
-        z: f64,
+        position: [f64; 3],
     ) -> petgraph::graph::NodeIndex {
         self.clear();
         self.graph.add_node(Joint {
             position: [
-                Length::new::<T>(x),
-                Length::new::<T>(y),
-                Length::new::<T>(z),
+                Length::new::<T>(position[0]),
+                Length::new::<T>(position[1]),
+                Length::new::<T>(position[2]),
             ],
             ..Joint::default()
         })
@@ -128,9 +126,7 @@ impl Truss {
     pub fn move_joint<T: LengthUnit + LengthConversion<f64>>(
         &mut self,
         a: petgraph::graph::NodeIndex,
-        x: f64,
-        y: f64,
-        z: f64,
+        position: [f64; 3],
     ) {
         self.clear();
         let joint = self.graph.node_weight_mut(a);
@@ -140,9 +136,9 @@ impl Truss {
             }
             Some(joint) => {
                 joint.position = [
-                    Length::new::<T>(x),
-                    Length::new::<T>(y),
-                    Length::new::<T>(z),
+                    Length::new::<T>(position[0]),
+                    Length::new::<T>(position[1]),
+                    Length::new::<T>(position[2]),
                 ];
             }
         }
@@ -456,9 +452,9 @@ mod tests {
     #[test]
     fn it_works() {
         let mut x = Truss::new();
-        let a = x.add_joint::<meter>(0.0, 0.0, 0.0);
-        let b = x.add_joint::<meter>(3.0, 0.0, 0.0);
-        let c = x.add_joint::<meter>(1.5, 1.5, 0.0);
+        let a = x.add_joint::<meter>([0.0, 0.0, 0.0]);
+        let b = x.add_joint::<meter>([3.0, 0.0, 0.0]);
+        let c = x.add_joint::<meter>([1.5, 1.5, 0.0]);
         let _ab = x.add_edge(a, b);
         let _bc = x.add_edge(b, c);
         let _ac = x.add_edge(a, c);
