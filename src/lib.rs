@@ -23,9 +23,42 @@ pub enum AnalysisError {
     /// Returned when a member spans zero distance.
     #[error("member {0:?} has zero length")]
     ZeroLengthMember(EdgeIndex),
+    /// Returned when the supplied properties for a member are not physically meaningful.
+    #[error("member {member:?} has invalid properties: {source}")]
+    InvalidMemberProperties {
+        /// Identifier of the offending member.
+        member: EdgeIndex,
+        /// Description of the invalid property.
+        #[source]
+        source: MemberPropertyError,
+    },
     /// Returned when the stiffness matrix cannot be inverted.
     #[error("stiffness matrix is singular; check supports and connectivity")]
     SingularStiffness,
+}
+
+/// Error returned when updating material properties for a truss member.
+///
+/// The variants describe the reason the supplied value is rejected so callers can
+/// present actionable feedback to users.
+#[derive(Clone, Copy, Debug, Error, PartialEq)]
+pub enum MemberPropertyError {
+    /// Returned when the cross-sectional area is zero or negative.
+    #[error("area must be positive (received {area})")]
+    NonPositiveArea {
+        /// Identifier of the affected member.
+        member: EdgeIndex,
+        /// Rejected cross-sectional area in square metres.
+        area: f64,
+    },
+    /// Returned when the elastic modulus is zero or negative.
+    #[error("elastic modulus must be positive (received {elastic_modulus})")]
+    NonPositiveElasticModulus {
+        /// Identifier of the affected member.
+        member: EdgeIndex,
+        /// Rejected elastic modulus in pascals.
+        elastic_modulus: f64,
+    },
 }
 
 /// Error returned when editing a [`Truss`] with invalid indices.
@@ -54,6 +87,9 @@ pub enum TrussEditError {
     /// Returned when a member cannot be found in the truss.
     #[error("member {0:?} does not exist in this truss")]
     UnknownMember(EdgeIndex),
+    /// Returned when the supplied member properties are invalid.
+    #[error("{0}")]
+    InvalidMemberProperties(MemberPropertyError),
 }
 
 #[derive(Clone, Debug)]
@@ -277,7 +313,33 @@ impl Truss {
     ///
     /// # Errors
     ///
-    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss.
+    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss and
+    /// [`TrussEditError::InvalidMemberProperties`] when either `area` or `elastic_modulus`
+    /// is not strictly positive.
+    ///
+    /// # Examples
+    /// ```
+    /// use trussx::{point, Truss, TrussEditError};
+    ///
+    /// let mut truss = Truss::new();
+    /// let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
+    /// let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
+    /// let member = truss.add_member(joint_a, joint_b);
+    ///
+    /// let error = truss
+    ///     .set_member_properties(member, 0.0, 200.0e9)
+    ///     .expect_err("zero area rejected");
+    /// assert!(matches!(
+    ///     error,
+    ///     TrussEditError::InvalidMemberProperties(
+    ///         trussx::MemberPropertyError::NonPositiveArea { .. }
+    ///     )
+    /// ));
+    ///
+    /// truss
+    ///     .set_member_properties(member, 0.01, 200.0e9)
+    ///     .expect("positive properties accepted");
+    /// ```
     pub fn set_member_properties(
         &mut self,
         member: EdgeIndex,
@@ -286,6 +348,19 @@ impl Truss {
     ) -> Result<(), TrussEditError> {
         if self.graph.edge_weight(member).is_none() {
             return Err(TrussEditError::UnknownMember(member));
+        }
+        if area <= 0.0 {
+            return Err(TrussEditError::InvalidMemberProperties(
+                MemberPropertyError::NonPositiveArea { member, area },
+            ));
+        }
+        if elastic_modulus <= 0.0 {
+            return Err(TrussEditError::InvalidMemberProperties(
+                MemberPropertyError::NonPositiveElasticModulus {
+                    member,
+                    elastic_modulus,
+                },
+            ));
         }
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
@@ -302,7 +377,15 @@ impl Truss {
     /// The supplied value is stored in pascals and used during [`Truss::evaluate`] to compute
     /// a factor of safety against yielding. Call [`Truss::member_factor_of_safety`] after an
     /// analysis to retrieve the resulting value.
-    pub fn set_member_yield_strength(&mut self, member: EdgeIndex, yield_strength: f64) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss.
+    pub fn set_member_yield_strength(
+        &mut self,
+        member: EdgeIndex,
+        yield_strength: f64,
+    ) -> Result<(), TrussEditError> {
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
             edge.yield_strength = Some(yield_strength);
@@ -351,6 +434,21 @@ impl Truss {
                 .properties()
                 .ok_or(AnalysisError::MissingProperties(edge))?;
             let (area, elastic_modulus) = properties;
+            if area <= 0.0 {
+                return Err(AnalysisError::InvalidMemberProperties {
+                    member: edge,
+                    source: MemberPropertyError::NonPositiveArea { member: edge, area },
+                });
+            }
+            if elastic_modulus <= 0.0 {
+                return Err(AnalysisError::InvalidMemberProperties {
+                    member: edge,
+                    source: MemberPropertyError::NonPositiveElasticModulus {
+                        member: edge,
+                        elastic_modulus,
+                    },
+                });
+            }
             let delta = end_joint.position - start_joint.position;
             let length = delta.norm();
             if length == 0.0 {
@@ -742,6 +840,55 @@ mod tests {
             foreign_remove_error,
             TrussEditError::UnknownMember(foreign_member)
         );
+    }
+
+    #[test]
+    fn member_properties_require_positive_values() {
+        let mut truss = Truss::new();
+        let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
+        let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
+        let member = truss.add_member(joint_a, joint_b);
+
+        let zero_area_error = truss
+            .set_member_properties(member, 0.0, 200.0e9)
+            .expect_err("zero area rejected");
+        assert_eq!(
+            zero_area_error,
+            TrussEditError::InvalidMemberProperties(MemberPropertyError::NonPositiveArea {
+                member,
+                area: 0.0,
+            },)
+        );
+
+        let negative_modulus_error = truss
+            .set_member_properties(member, 0.01, -200.0e9)
+            .expect_err("negative modulus rejected");
+        assert_eq!(
+            negative_modulus_error,
+            TrussEditError::InvalidMemberProperties(
+                MemberPropertyError::NonPositiveElasticModulus {
+                    member,
+                    elastic_modulus: -200.0e9,
+                },
+            )
+        );
+
+        let zero_modulus_error = truss
+            .set_member_properties(member, 0.02, 0.0)
+            .expect_err("zero modulus rejected");
+        assert_eq!(
+            zero_modulus_error,
+            TrussEditError::InvalidMemberProperties(
+                MemberPropertyError::NonPositiveElasticModulus {
+                    member,
+                    elastic_modulus: 0.0,
+                },
+            )
+        );
+
+        truss
+            .set_member_properties(member, 0.02, 210.0e9)
+            .expect("positive properties accepted");
     }
 
     #[test]

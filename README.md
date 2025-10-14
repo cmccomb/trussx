@@ -31,6 +31,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     truss.set_load(b, Vector3::new(-1000.0, 0.0, 0.0))?;
 
     let ab = truss.add_member(a, b);
+    // Member properties must be strictly positive to represent a physical bar.
     truss.set_member_properties(ab, 0.01, 200.0e9)?;
 
     truss.evaluate()?;
@@ -40,6 +41,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+Both the cross-sectional area and elastic modulus must be strictly positive. The library
+rejects zero or negative inputs with a descriptive
+[`TrussEditError`](https://docs.rs/trussx/latest/trussx/enum.TrussEditError.html) so incorrect
+data is surfaced before attempting an analysis.
 
 ## Testing
 
