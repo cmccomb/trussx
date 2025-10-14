@@ -28,6 +28,34 @@ pub enum AnalysisError {
     SingularStiffness,
 }
 
+/// Error returned when editing a [`Truss`] with invalid indices.
+///
+/// Attempting to mutate the structure with a joint or member that is not part of the
+/// current graph returns a descriptive variant so callers can decide how to recover.
+///
+/// # Examples
+///
+/// ```
+/// use petgraph::graph::EdgeIndex;
+/// use trussx::{Truss, TrussEditError};
+///
+/// let mut truss = Truss::new();
+/// let invalid_member = EdgeIndex::new(42);
+/// let error = truss
+///     .set_member_properties(invalid_member, 0.01, 200.0e9)
+///     .expect_err("unknown member is rejected");
+/// assert_eq!(error, TrussEditError::UnknownMember(invalid_member));
+/// ```
+#[derive(Debug, Error, PartialEq)]
+pub enum TrussEditError {
+    /// Returned when a joint cannot be found in the truss.
+    #[error("joint {0:?} does not exist in this truss")]
+    UnknownJoint(NodeIndex),
+    /// Returned when a member cannot be found in the truss.
+    #[error("member {0:?} does not exist in this truss")]
+    UnknownMember(EdgeIndex),
+}
+
 #[derive(Clone, Debug)]
 struct Joint {
     /// Position of the joint in metres.
@@ -145,17 +173,38 @@ impl Truss {
     }
 
     /// Update the position of an existing joint.
-    pub fn move_joint(&mut self, joint: NodeIndex, position: Point3) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
+    pub fn move_joint(&mut self, joint: NodeIndex, position: Point3) -> Result<(), TrussEditError> {
+        if self.graph.node_weight(joint).is_none() {
+            return Err(TrussEditError::UnknownJoint(joint));
+        }
         self.invalidate();
         if let Some(node) = self.graph.node_weight_mut(joint) {
             node.position = position;
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownJoint(joint))
         }
     }
 
     /// Remove a joint and all connected members from the truss.
-    pub fn remove_joint(&mut self, joint: NodeIndex) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
+    pub fn remove_joint(&mut self, joint: NodeIndex) -> Result<(), TrussEditError> {
+        if self.graph.node_weight(joint).is_none() {
+            return Err(TrussEditError::UnknownJoint(joint));
+        }
         self.invalidate();
-        self.graph.remove_node(joint);
+        if self.graph.remove_node(joint).is_some() {
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownJoint(joint))
+        }
     }
 
     /// Connect two joints with a new member.
@@ -165,36 +214,86 @@ impl Truss {
     }
 
     /// Remove a member from the truss.
-    pub fn remove_member(&mut self, member: EdgeIndex) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss.
+    pub fn remove_member(&mut self, member: EdgeIndex) -> Result<(), TrussEditError> {
+        if self.graph.edge_weight(member).is_none() {
+            return Err(TrussEditError::UnknownMember(member));
+        }
         self.invalidate();
-        self.graph.remove_edge(member);
+        if self.graph.remove_edge(member).is_some() {
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownMember(member))
+        }
     }
 
     /// Set the restraint state for a joint.
     ///
     /// Each entry in `support` corresponds to the X, Y and Z directions respectively. A
     /// value of `true` indicates that the degree of freedom is fixed.
-    pub fn set_support(&mut self, joint: NodeIndex, support: [bool; 3]) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
+    pub fn set_support(
+        &mut self,
+        joint: NodeIndex,
+        support: [bool; 3],
+    ) -> Result<(), TrussEditError> {
+        if self.graph.node_weight(joint).is_none() {
+            return Err(TrussEditError::UnknownJoint(joint));
+        }
         self.invalidate();
         if let Some(node) = self.graph.node_weight_mut(joint) {
             node.support = support;
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownJoint(joint))
         }
     }
 
     /// Apply a point load to a joint.
-    pub fn set_load(&mut self, joint: NodeIndex, load: Vector3<f64>) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
+    pub fn set_load(&mut self, joint: NodeIndex, load: Vector3<f64>) -> Result<(), TrussEditError> {
+        if self.graph.node_weight(joint).is_none() {
+            return Err(TrussEditError::UnknownJoint(joint));
+        }
         self.invalidate();
         if let Some(node) = self.graph.node_weight_mut(joint) {
             node.load = load;
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownJoint(joint))
         }
     }
 
     /// Set the axial properties for a member.
-    pub fn set_member_properties(&mut self, member: EdgeIndex, area: f64, elastic_modulus: f64) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss.
+    pub fn set_member_properties(
+        &mut self,
+        member: EdgeIndex,
+        area: f64,
+        elastic_modulus: f64,
+    ) -> Result<(), TrussEditError> {
+        if self.graph.edge_weight(member).is_none() {
+            return Err(TrussEditError::UnknownMember(member));
+        }
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
             edge.area = Some(area);
             edge.elastic_modulus = Some(elastic_modulus);
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownMember(member))
         }
     }
 
@@ -207,6 +306,9 @@ impl Truss {
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
             edge.yield_strength = Some(yield_strength);
+            Ok(())
+        } else {
+            Err(TrussEditError::UnknownMember(member))
         }
     }
 
@@ -554,16 +656,115 @@ mod tests {
     use super::*;
 
     #[test]
+    fn joint_mutators_return_error_for_unknown_indices() {
+        let mut truss = Truss::new();
+        let stale_joint = truss.add_joint(point(0.0, 0.0, 0.0));
+        truss
+            .remove_joint(stale_joint)
+            .expect("initial joint removal succeeds");
+
+        let mut other = Truss::new();
+        let foreign_joint = other.add_joint(point(1.0, 0.0, 0.0));
+
+        for joint in [stale_joint, foreign_joint] {
+            let move_error = truss
+                .move_joint(joint, point(2.0, 0.0, 0.0))
+                .expect_err("unknown joint rejected");
+            assert_eq!(move_error, TrussEditError::UnknownJoint(joint));
+
+            let support_error = truss
+                .set_support(joint, [true, false, false])
+                .expect_err("unknown joint rejected");
+            assert_eq!(support_error, TrussEditError::UnknownJoint(joint));
+
+            let load_error = truss
+                .set_load(joint, Vector3::new(0.0, 0.0, 0.0))
+                .expect_err("unknown joint rejected");
+            assert_eq!(load_error, TrussEditError::UnknownJoint(joint));
+        }
+
+        let stale_remove_error = truss
+            .remove_joint(stale_joint)
+            .expect_err("stale joint rejected");
+        assert_eq!(
+            stale_remove_error,
+            TrussEditError::UnknownJoint(stale_joint)
+        );
+
+        let foreign_remove_error = truss
+            .remove_joint(foreign_joint)
+            .expect_err("foreign joint rejected");
+        assert_eq!(
+            foreign_remove_error,
+            TrussEditError::UnknownJoint(foreign_joint)
+        );
+    }
+
+    #[test]
+    fn member_mutators_return_error_for_unknown_indices() {
+        let mut truss = Truss::new();
+        let a = truss.add_joint(point(0.0, 0.0, 0.0));
+        let b = truss.add_joint(point(1.0, 0.0, 0.0));
+        let stale_member = truss.add_member(a, b);
+        truss
+            .remove_member(stale_member)
+            .expect("initial member removal succeeds");
+
+        let mut other = Truss::new();
+        let start = other.add_joint(point(0.0, 0.0, 0.0));
+        let end = other.add_joint(point(1.0, 0.0, 0.0));
+        let foreign_member = other.add_member(start, end);
+
+        for member in [stale_member, foreign_member] {
+            let props_error = truss
+                .set_member_properties(member, 0.01, 200.0e9)
+                .expect_err("unknown member rejected");
+            assert_eq!(props_error, TrussEditError::UnknownMember(member));
+
+            let yield_error = truss
+                .set_member_yield_strength(member, 250.0e6)
+                .expect_err("unknown member rejected");
+            assert_eq!(yield_error, TrussEditError::UnknownMember(member));
+        }
+
+        let stale_remove_error = truss
+            .remove_member(stale_member)
+            .expect_err("stale member rejected");
+        assert_eq!(
+            stale_remove_error,
+            TrussEditError::UnknownMember(stale_member)
+        );
+
+        let foreign_remove_error = truss
+            .remove_member(foreign_member)
+            .expect_err("foreign member rejected");
+        assert_eq!(
+            foreign_remove_error,
+            TrussEditError::UnknownMember(foreign_member)
+        );
+    }
+
+    #[test]
     fn single_bar_in_tension() {
         let mut truss = Truss::new();
         let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
         let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
-        truss.set_support(joint_a, [true, true, true]);
-        truss.set_support(joint_b, [false, true, true]);
-        truss.set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0));
+        truss
+            .set_support(joint_a, [true, true, true])
+            .expect("joint A exists");
+        truss
+            .set_support(joint_b, [false, true, true])
+            .expect("joint B exists");
+        truss
+            .set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0))
+            .expect("joint B exists");
         let member_ab = truss.add_member(joint_a, joint_b);
-        truss.set_member_properties(member_ab, 0.01, 200.0e9);
-        truss.set_member_yield_strength(member_ab, 250.0e6);
+        truss
+            .set_member_properties(member_ab, 0.01, 200.0e9)
+            .expect("member AB exists");
+        truss
+            .set_member_yield_strength(member_ab, 250.0e6)
+            .expect("member AB exists");
 
         truss.evaluate().expect("analysis succeeds");
 
@@ -588,9 +789,15 @@ mod tests {
         let mut truss = Truss::new();
         let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
         let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
-        truss.set_support(joint_a, [true, true, true]);
-        truss.set_support(joint_b, [false, true, true]);
-        truss.set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0));
+        truss
+            .set_support(joint_a, [true, true, true])
+            .expect("joint A exists");
+        truss
+            .set_support(joint_b, [false, true, true])
+            .expect("joint B exists");
+        truss
+            .set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0))
+            .expect("joint B exists");
         let member_ab = truss.add_member(joint_a, joint_b);
         let error = truss.evaluate().expect_err("missing properties");
         assert_eq!(error, AnalysisError::MissingProperties(member_ab));
@@ -603,17 +810,27 @@ mod tests {
         let joint_b = truss.add_joint(point(6.0, 0.0, 0.0));
         let joint_c = truss.add_joint(point(3.0, 4.0, 0.0));
 
-        truss.set_support(joint_a, [true, true, true]);
-        truss.set_support(joint_b, [false, true, true]);
-        truss.set_support(joint_c, [false, false, true]);
-        truss.set_load(joint_c, Vector3::new(0.0, -10_000.0, 0.0));
+        truss
+            .set_support(joint_a, [true, true, true])
+            .expect("joint A exists");
+        truss
+            .set_support(joint_b, [false, true, true])
+            .expect("joint B exists");
+        truss
+            .set_support(joint_c, [false, false, true])
+            .expect("joint C exists");
+        truss
+            .set_load(joint_c, Vector3::new(0.0, -10_000.0, 0.0))
+            .expect("joint C exists");
 
         let bottom_member = truss.add_member(joint_a, joint_b);
         let left_diagonal = truss.add_member(joint_a, joint_c);
         let right_diagonal = truss.add_member(joint_b, joint_c);
 
         for member in [bottom_member, left_diagonal, right_diagonal] {
-            truss.set_member_properties(member, 0.003, 200.0e9);
+            truss
+                .set_member_properties(member, 0.003, 200.0e9)
+                .expect("member exists");
         }
 
         truss.evaluate().expect("analysis succeeds");
@@ -649,8 +866,12 @@ mod tests {
         let mid_apex = truss.add_joint(point(7.5, 3.0, 0.0));
         let right_apex = truss.add_joint(point(12.5, 3.0, 0.0));
 
-        truss.set_support(left_support, [true, true, true]);
-        truss.set_support(right_support, [false, true, true]);
+        truss
+            .set_support(left_support, [true, true, true])
+            .expect("left support exists");
+        truss
+            .set_support(right_support, [false, true, true])
+            .expect("right support exists");
         for joint in [
             lower_panel_b,
             lower_panel_c,
@@ -658,12 +879,14 @@ mod tests {
             mid_apex,
             right_apex,
         ] {
-            truss.set_support(joint, [false, false, true]);
+            truss
+                .set_support(joint, [false, false, true])
+                .expect("joint exists");
         }
 
         let roof_load = Vector3::new(0.0, -15_000.0, 0.0);
         for joint in [left_apex, mid_apex, right_apex] {
-            truss.set_load(joint, roof_load);
+            truss.set_load(joint, roof_load).expect("joint exists");
         }
 
         let bottom_left_panel = truss.add_member(left_support, lower_panel_b);
@@ -691,7 +914,9 @@ mod tests {
             right_post,
             right_raker,
         ] {
-            truss.set_member_properties(member, 0.004, 210.0e9);
+            truss
+                .set_member_properties(member, 0.004, 210.0e9)
+                .expect("member exists");
         }
 
         truss.evaluate().expect("analysis succeeds");
