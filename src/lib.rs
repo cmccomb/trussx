@@ -299,17 +299,10 @@ impl Truss {
 
     /// Set the yield strength for a member.
     ///
-    /// # Errors
-    ///
-    /// Returns [`TrussEditError::UnknownMember`] when `member` is not part of this truss.
-    pub fn set_member_yield_strength(
-        &mut self,
-        member: EdgeIndex,
-        yield_strength: f64,
-    ) -> Result<(), TrussEditError> {
-        if self.graph.edge_weight(member).is_none() {
-            return Err(TrussEditError::UnknownMember(member));
-        }
+    /// The supplied value is stored in pascals and used during [`Truss::evaluate`] to compute
+    /// a factor of safety against yielding. Call [`Truss::member_factor_of_safety`] after an
+    /// analysis to retrieve the resulting value.
+    pub fn set_member_yield_strength(&mut self, member: EdgeIndex, yield_strength: f64) {
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
             edge.yield_strength = Some(yield_strength);
@@ -608,6 +601,32 @@ impl Truss {
     }
 
     /// Retrieve the factor of safety for a member, if available.
+    ///
+    /// The factor of safety is computed as `|yield_strength| / |stress|`. The result is `None`
+    /// when no yield strength has been assigned, [`Truss::evaluate`] has not yet been called, the
+    /// computed stress is effectively zero, or the ratio is not finite.
+    ///
+    /// # Examples
+    /// ```
+    /// use nalgebra::Vector3;
+    /// use trussx::{point, Truss};
+    ///
+    /// let mut truss = Truss::new();
+    /// let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
+    /// let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
+    /// truss.set_support(joint_a, [true, true, true]);
+    /// truss.set_support(joint_b, [false, true, true]);
+    /// truss.set_load(joint_b, Vector3::new(-1_000.0, 0.0, 0.0));
+    ///
+    /// let member_ab = truss.add_member(joint_a, joint_b);
+    /// truss.set_member_properties(member_ab, 0.01, 200.0e9);
+    /// truss.set_member_yield_strength(member_ab, 250.0e6);
+    ///
+    /// truss.evaluate().unwrap();
+    ///
+    /// let fos = truss.member_factor_of_safety(member_ab).unwrap();
+    /// assert!((fos - 2500.0).abs() < 1.0e-6);
+    /// ```
     #[must_use]
     pub fn member_factor_of_safety(&self, member: EdgeIndex) -> Option<f64> {
         self.graph
