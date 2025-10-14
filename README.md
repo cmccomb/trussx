@@ -50,3 +50,25 @@ full suite with:
 ```bash
 cargo test
 ```
+
+### Member safety factors
+
+Assign a yield strength to each member with `set_member_yield_strength` to enable factor of
+safety calculations. During `Truss::evaluate` the library compares the absolute yield
+strength to the absolute axial stress for each analysed member and stores the ratio. You can
+read the value back with `member_factor_of_safety`.
+
+`member_factor_of_safety` returns `None` when:
+
+- No yield strength has been assigned to the member.
+- The structure has not been analysed since the last modification.
+- The computed axial stress is effectively zero (no meaningful demand).
+- The resulting ratio is not a finite floating-point number.
+
+The repository includes an executable example that demonstrates the workflow end-to-end:
+
+```bash
+cargo run --example factor_of_safety
+```
+
+See [`examples/factor_of_safety.rs`](examples/factor_of_safety.rs) for the full source.
