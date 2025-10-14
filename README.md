@@ -1,23 +1,52 @@
 [![Crates.io](https://img.shields.io/crates/v/trussx.svg)](https://crates.io/crates/trussx)
 [![docs.rs](https://docs.rs/trussx/badge.svg)](https://docs.rs/trussx)
-# About
-This package provides utilities for designing and analyzing truss structures
 
-# Usage
-Here are some basic examples of usage
-## Building a truss
-For example, you can build a truss with something like:
+# trussx
+
+Utilities for building and analysing pin-jointed truss structures. The crate provides a
+small, strongly-typed API for creating joints and members, applying loads and supports,
+and running a linear elastic analysis in three dimensions.
+
+## Installation
+
+Add the dependency to your `Cargo.toml`:
+
+```toml
+[dependencies]
+trussx = "0.1"
+```
+
+## Usage
+
 ```rust
-fn main() {
-    let mut x = Truss::new();
-    let a = x.add_joint([0.0, 0.0, 0.0]);
-    let b = x.add_joint([3.0, 0.0, 0.0]);
-    let c = x.add_joint([1.5, 1.5, 0.0]);
-    let _ab = x.add_edge(a, b);
-    let _bc = x.add_edge(b, c);
-    let _ac = x.add_edge(a, c);
+use nalgebra::Vector3;
+use trussx::{point, Truss};
+
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut truss = Truss::new();
+    let a = truss.add_joint(point(0.0, 0.0, 0.0));
+    let b = truss.add_joint(point(1.0, 0.0, 0.0));
+    truss.set_support(a, [true, true, true]);
+    truss.set_support(b, [false, true, true]);
+    truss.set_load(b, Vector3::new(-1000.0, 0.0, 0.0));
+
+    let ab = truss.add_member(a, b);
+    truss.set_member_properties(ab, 0.01, 200.0e9);
+
+    truss.evaluate()?;
+
+    let displacement = truss.joint_displacement(b).unwrap();
+    println!("ux = {:.3e} m", displacement.x);
+    Ok(())
 }
 ```
 
-## Analyzing a truss
-Coming soon!
+## Testing
+
+The project includes unit tests that validate the analysis results for a simple bar in
+tension and ensure meaningful error reporting when required data is missing. Run the
+full suite with:
+
+```bash
+cargo test
+```
