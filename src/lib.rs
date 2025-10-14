@@ -20,6 +20,18 @@ pub enum AnalysisError {
     /// Returned when a member is missing required material properties.
     #[error("member {0:?} is missing material properties")]
     MissingProperties(EdgeIndex),
+    /// Returned when a member is assigned non-positive axial properties.
+    #[error(
+        "member {member:?} has invalid properties: area = {area}, elastic_modulus = {elastic_modulus}"
+    )]
+    InvalidMemberProperties {
+        /// Identifier of the member with invalid properties.
+        member: EdgeIndex,
+        /// Cross-sectional area provided during assignment.
+        area: f64,
+        /// Elastic modulus provided during assignment.
+        elastic_modulus: f64,
+    },
     /// Returned when a member spans zero distance.
     #[error("member {0:?} has zero length")]
     ZeroLengthMember(EdgeIndex),
@@ -190,12 +202,30 @@ impl Truss {
     }
 
     /// Set the axial properties for a member.
-    pub fn set_member_properties(&mut self, member: EdgeIndex, area: f64, elastic_modulus: f64) {
+    ///
+    /// # Errors
+    ///
+    /// Returns [`AnalysisError::InvalidMemberProperties`] when either `area` or
+    /// `elastic_modulus` are less than or equal to zero.
+    pub fn set_member_properties(
+        &mut self,
+        member: EdgeIndex,
+        area: f64,
+        elastic_modulus: f64,
+    ) -> Result<(), AnalysisError> {
+        if area <= 0.0 || elastic_modulus <= 0.0 {
+            return Err(AnalysisError::InvalidMemberProperties {
+                member,
+                area,
+                elastic_modulus,
+            });
+        }
         self.invalidate();
         if let Some(edge) = self.graph.edge_weight_mut(member) {
             edge.area = Some(area);
             edge.elastic_modulus = Some(elastic_modulus);
         }
+        Ok(())
     }
 
     /// Set the yield strength for a member.
@@ -532,7 +562,9 @@ mod tests {
         truss.set_support(joint_b, [false, true, true]);
         truss.set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0));
         let member_ab = truss.add_member(joint_a, joint_b);
-        truss.set_member_properties(member_ab, 0.01, 200.0e9);
+        truss
+            .set_member_properties(member_ab, 0.01, 200.0e9)
+            .expect("valid member properties");
         truss.set_member_yield_strength(member_ab, 250.0e6);
 
         truss.evaluate().expect("analysis succeeds");
@@ -567,6 +599,46 @@ mod tests {
     }
 
     #[test]
+    fn set_member_properties_rejects_zero_area() {
+        let mut truss = Truss::new();
+        let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
+        let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
+        let member_ab = truss.add_member(joint_a, joint_b);
+
+        let error = truss
+            .set_member_properties(member_ab, 0.0, 200.0e9)
+            .expect_err("zero area is rejected");
+        assert_eq!(
+            error,
+            AnalysisError::InvalidMemberProperties {
+                member: member_ab,
+                area: 0.0,
+                elastic_modulus: 200.0e9,
+            }
+        );
+    }
+
+    #[test]
+    fn set_member_properties_rejects_negative_modulus() {
+        let mut truss = Truss::new();
+        let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
+        let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
+        let member_ab = truss.add_member(joint_a, joint_b);
+
+        let error = truss
+            .set_member_properties(member_ab, 0.01, -10.0e9)
+            .expect_err("negative modulus is rejected");
+        assert_eq!(
+            error,
+            AnalysisError::InvalidMemberProperties {
+                member: member_ab,
+                area: 0.01,
+                elastic_modulus: -10.0e9,
+            }
+        );
+    }
+
+    #[test]
     fn triangular_truss_matches_reference_solution() {
         let mut truss = Truss::new();
         let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
@@ -583,7 +655,9 @@ mod tests {
         let right_diagonal = truss.add_member(joint_b, joint_c);
 
         for member in [bottom_member, left_diagonal, right_diagonal] {
-            truss.set_member_properties(member, 0.003, 200.0e9);
+            truss
+                .set_member_properties(member, 0.003, 200.0e9)
+                .expect("valid member properties");
         }
 
         truss.evaluate().expect("analysis succeeds");
@@ -661,7 +735,9 @@ mod tests {
             right_post,
             right_raker,
         ] {
-            truss.set_member_properties(member, 0.004, 210.0e9);
+            truss
+                .set_member_properties(member, 0.004, 210.0e9)
+                .expect("valid member properties");
         }
 
         truss.evaluate().expect("analysis succeeds");
