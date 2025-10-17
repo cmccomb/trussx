@@ -77,3 +77,17 @@ cargo run --example factor_of_safety
 ```
 
 See [`examples/factor_of_safety.rs`](examples/factor_of_safety.rs) for the full source.
+
+### Command-line walkthrough
+
+The repository also includes a heavily commented CLI example that rebuilds the
+cantilever bar step by step. Run it with:
+
+```bash
+cargo run
+```
+
+The output explains how the geometry, boundary conditions, and material
+properties combine to produce the reported displacement, stress, and factor of
+safety. This is a convenient starting point for developers who prefer to learn
+from an executable reference alongside the API documentation.
