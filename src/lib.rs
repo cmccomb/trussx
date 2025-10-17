@@ -11,8 +11,128 @@ use nalgebra::{DMatrix, DVector, SMatrix, Vector3};
 use petgraph::graph::{EdgeIndex, Graph, NodeIndex};
 use thiserror::Error;
 
-/// Three dimensional vector of `f64` values.
-pub type Point3 = Vector3<f64>;
+/// Position in three dimensional space measured in metres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Point {
+    /// Distance along the global X axis.
+    pub x: f64,
+    /// Distance along the global Y axis.
+    pub y: f64,
+    /// Distance along the global Z axis.
+    pub z: f64,
+}
+
+impl Point {
+    /// Create a [`Point`] with explicit coordinates.
+    #[must_use]
+    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Convert the point into an algebraic vector.
+    #[must_use]
+    fn to_vector(self) -> Vector3<f64> {
+        Vector3::new(self.x, self.y, self.z)
+    }
+}
+
+impl From<Vector3<f64>> for Point {
+    fn from(value: Vector3<f64>) -> Self {
+        Self::new(value.x, value.y, value.z)
+    }
+}
+
+impl From<Point> for Vector3<f64> {
+    fn from(value: Point) -> Self {
+        value.to_vector()
+    }
+}
+
+/// Cartesian vector representing a three dimensional force in newtons.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Force {
+    /// Force component acting along the global X axis.
+    pub x: f64,
+    /// Force component acting along the global Y axis.
+    pub y: f64,
+    /// Force component acting along the global Z axis.
+    pub z: f64,
+}
+
+impl Force {
+    /// Create a [`Force`] with explicit components.
+    #[must_use]
+    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Convert the force into an algebraic vector.
+    #[must_use]
+    fn to_vector(self) -> Vector3<f64> {
+        Vector3::new(self.x, self.y, self.z)
+    }
+}
+
+impl Default for Force {
+    fn default() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
+}
+
+impl From<Vector3<f64>> for Force {
+    fn from(value: Vector3<f64>) -> Self {
+        Self::new(value.x, value.y, value.z)
+    }
+}
+
+impl From<Force> for Vector3<f64> {
+    fn from(value: Force) -> Self {
+        value.to_vector()
+    }
+}
+
+/// Translation vector describing joint displacement in metres.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Displacement {
+    /// Displacement component along the global X axis.
+    pub x: f64,
+    /// Displacement component along the global Y axis.
+    pub y: f64,
+    /// Displacement component along the global Z axis.
+    pub z: f64,
+}
+
+impl Displacement {
+    /// Create a [`Displacement`] with explicit components.
+    #[must_use]
+    pub const fn new(x: f64, y: f64, z: f64) -> Self {
+        Self { x, y, z }
+    }
+
+    /// Convert the displacement into an algebraic vector.
+    #[must_use]
+    fn to_vector(self) -> Vector3<f64> {
+        Vector3::new(self.x, self.y, self.z)
+    }
+}
+
+impl Default for Displacement {
+    fn default() -> Self {
+        Self::new(0.0, 0.0, 0.0)
+    }
+}
+
+impl From<Vector3<f64>> for Displacement {
+    fn from(value: Vector3<f64>) -> Self {
+        Self::new(value.x, value.y, value.z)
+    }
+}
+
+impl From<Displacement> for Vector3<f64> {
+    fn from(value: Displacement) -> Self {
+        value.to_vector()
+    }
+}
 
 /// Error returned when a truss analysis fails.
 #[derive(Debug, Error, PartialEq)]
@@ -95,23 +215,23 @@ pub enum TrussEditError {
 #[derive(Clone, Debug)]
 struct Joint {
     /// Position of the joint in metres.
-    position: Point3,
+    position: Point,
     /// True if the corresponding translational degree of freedom is restrained.
     support: [bool; 3],
     /// External load applied to the joint in newtons.
-    load: Vector3<f64>,
+    load: Force,
     /// Resulting displacement after analysis in metres.
-    displacement: Vector3<f64>,
+    displacement: Displacement,
 }
 
 impl Joint {
     /// Create a new joint at the supplied position.
-    fn new(position: Point3) -> Self {
+    fn new(position: Point) -> Self {
         Self {
             position,
             support: [false, false, false],
-            load: Vector3::zeros(),
-            displacement: Vector3::zeros(),
+            load: Force::default(),
+            displacement: Displacement::default(),
         }
     }
 }
@@ -195,15 +315,14 @@ impl Truss {
     ///
     /// # Examples
     /// ```
-    /// use nalgebra::Vector3;
-    /// use trussx::Truss;
+    /// use trussx::{point, Truss};
     ///
     /// let mut truss = Truss::new();
-    /// let joint = truss.add_joint(Vector3::new(0.0, 0.0, 0.0));
+    /// let joint = truss.add_joint(point(0.0, 0.0, 0.0));
     /// assert_eq!(truss.joint_count(), 1);
     /// assert_eq!(joint.index(), 0);
     /// ```
-    pub fn add_joint(&mut self, position: Point3) -> NodeIndex {
+    pub fn add_joint(&mut self, position: Point) -> NodeIndex {
         self.invalidate();
         self.graph.add_node(Joint::new(position))
     }
@@ -213,7 +332,7 @@ impl Truss {
     /// # Errors
     ///
     /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
-    pub fn move_joint(&mut self, joint: NodeIndex, position: Point3) -> Result<(), TrussEditError> {
+    pub fn move_joint(&mut self, joint: NodeIndex, position: Point) -> Result<(), TrussEditError> {
         if self.graph.node_weight(joint).is_none() {
             return Err(TrussEditError::UnknownJoint(joint));
         }
@@ -296,7 +415,7 @@ impl Truss {
     /// # Errors
     ///
     /// Returns [`TrussEditError::UnknownJoint`] when `joint` is not part of this truss.
-    pub fn set_load(&mut self, joint: NodeIndex, load: Vector3<f64>) -> Result<(), TrussEditError> {
+    pub fn set_load(&mut self, joint: NodeIndex, load: Force) -> Result<(), TrussEditError> {
         if self.graph.node_weight(joint).is_none() {
             return Err(TrussEditError::UnknownJoint(joint));
         }
@@ -399,7 +518,7 @@ impl Truss {
     fn invalidate(&mut self) {
         if self.analysis_valid {
             for joint in self.graph.node_weights_mut() {
-                joint.displacement = Vector3::zeros();
+                joint.displacement = Displacement::default();
             }
             for member in self.graph.edge_weights_mut() {
                 member.axial_force = 0.0;
@@ -449,7 +568,7 @@ impl Truss {
                     },
                 });
             }
-            let delta = end_joint.position - start_joint.position;
+            let delta = end_joint.position.to_vector() - start_joint.position.to_vector();
             let length = delta.norm();
             if length == 0.0 {
                 return Err(AnalysisError::ZeroLengthMember(edge));
@@ -588,9 +707,11 @@ impl Truss {
         for node in self.graph.node_indices() {
             let joint = self.graph.node_weight_mut(node).expect("valid node");
             let base = index_map[&node] * 3;
-            joint.displacement.x = displacements[base];
-            joint.displacement.y = displacements[base + 1];
-            joint.displacement.z = displacements[base + 2];
+            joint.displacement = Displacement::new(
+                displacements[base],
+                displacements[base + 1],
+                displacements[base + 2],
+            );
         }
     }
 
@@ -616,7 +737,7 @@ impl Truss {
                 }
                 continue;
             };
-            let delta = end_joint.position - start_joint.position;
+            let delta = end_joint.position.to_vector() - start_joint.position.to_vector();
             let length = delta.norm();
             if length == 0.0 {
                 if let Some(member) = self.graph.edge_weight_mut(edge) {
@@ -629,17 +750,17 @@ impl Truss {
             let direction = delta / length;
             let start_idx = index_map[&start] * 3;
             let end_idx = index_map[&end] * 3;
-            let start_disp = Vector3::new(
+            let start_disp = Displacement::new(
                 displacements[start_idx],
                 displacements[start_idx + 1],
                 displacements[start_idx + 2],
             );
-            let end_disp = Vector3::new(
+            let end_disp = Displacement::new(
                 displacements[end_idx],
                 displacements[end_idx + 1],
                 displacements[end_idx + 2],
             );
-            let axial_extension = direction.dot(&(end_disp - start_disp));
+            let axial_extension = direction.dot(&(end_disp.to_vector() - start_disp.to_vector()));
             let axial_force = elastic_modulus * area * axial_extension / length;
             let stress = axial_force / area;
             if let Some(member) = self.graph.edge_weight_mut(edge) {
@@ -678,7 +799,7 @@ impl Truss {
 
     /// Retrieve the displacement vector for a joint.
     #[must_use]
-    pub fn joint_displacement(&self, joint: NodeIndex) -> Option<Vector3<f64>> {
+    pub fn joint_displacement(&self, joint: NodeIndex) -> Option<Displacement> {
         self.graph
             .node_weight(joint)
             .map(|joint| joint.displacement)
@@ -706,15 +827,14 @@ impl Truss {
     ///
     /// # Examples
     /// ```
-    /// use nalgebra::Vector3;
-    /// use trussx::{point, Truss};
+    /// use trussx::{force, point, Truss};
     ///
     /// let mut truss = Truss::new();
     /// let joint_a = truss.add_joint(point(0.0, 0.0, 0.0));
     /// let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
     /// truss.set_support(joint_a, [true, true, true]);
     /// truss.set_support(joint_b, [false, true, true]);
-    /// truss.set_load(joint_b, Vector3::new(-1_000.0, 0.0, 0.0));
+    /// truss.set_load(joint_b, force(-1_000.0, 0.0, 0.0));
     ///
     /// let member_ab = truss.add_member(joint_a, joint_b);
     /// truss.set_member_properties(member_ab, 0.01, 200.0e9);
@@ -733,7 +853,7 @@ impl Truss {
     }
 }
 
-/// Convenience helper for creating position vectors.
+/// Convenience helper for creating [`Point`] instances.
 ///
 /// # Examples
 /// ```
@@ -743,8 +863,36 @@ impl Truss {
 /// assert_eq!(origin.x, 0.0);
 /// ```
 #[must_use]
-pub fn point(x: f64, y: f64, z: f64) -> Point3 {
-    Vector3::new(x, y, z)
+pub const fn point(x: f64, y: f64, z: f64) -> Point {
+    Point::new(x, y, z)
+}
+
+/// Convenience helper for creating [`Force`] instances.
+///
+/// # Examples
+/// ```
+/// use trussx::force;
+///
+/// let load = force(1.0, 0.0, -5.0);
+/// assert_eq!(load.z, -5.0);
+/// ```
+#[must_use]
+pub const fn force(x: f64, y: f64, z: f64) -> Force {
+    Force::new(x, y, z)
+}
+
+/// Convenience helper for creating [`Displacement`] instances.
+///
+/// # Examples
+/// ```
+/// use trussx::displacement;
+///
+/// let delta = displacement(0.001, 0.0, 0.0);
+/// assert_eq!(delta.x, 0.001);
+/// ```
+#[must_use]
+pub const fn displacement(x: f64, y: f64, z: f64) -> Displacement {
+    Displacement::new(x, y, z)
 }
 
 #[cfg(test)]
@@ -776,7 +924,7 @@ mod tests {
             assert_eq!(support_error, TrussEditError::UnknownJoint(joint));
 
             let load_error = truss
-                .set_load(joint, Vector3::new(0.0, 0.0, 0.0))
+                .set_load(joint, force(0.0, 0.0, 0.0))
                 .expect_err("unknown joint rejected");
             assert_eq!(load_error, TrussEditError::UnknownJoint(joint));
         }
@@ -903,7 +1051,7 @@ mod tests {
             .set_support(joint_b, [false, true, true])
             .expect("joint B exists");
         truss
-            .set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0))
+            .set_load(joint_b, force(-1000.0, 0.0, 0.0))
             .expect("joint B exists");
         let member_ab = truss.add_member(joint_a, joint_b);
         truss
@@ -943,7 +1091,7 @@ mod tests {
             .set_support(joint_b, [false, true, true])
             .expect("joint B exists");
         truss
-            .set_load(joint_b, Vector3::new(-1000.0, 0.0, 0.0))
+            .set_load(joint_b, force(-1000.0, 0.0, 0.0))
             .expect("joint B exists");
         let member_ab = truss.add_member(joint_a, joint_b);
         let error = truss.evaluate().expect_err("missing properties");
@@ -967,7 +1115,7 @@ mod tests {
             .set_support(joint_c, [false, false, true])
             .expect("joint C exists");
         truss
-            .set_load(joint_c, Vector3::new(0.0, -10_000.0, 0.0))
+            .set_load(joint_c, force(0.0, -10_000.0, 0.0))
             .expect("joint C exists");
 
         let bottom_member = truss.add_member(joint_a, joint_b);
@@ -1031,7 +1179,7 @@ mod tests {
                 .expect("joint exists");
         }
 
-        let roof_load = Vector3::new(0.0, -15_000.0, 0.0);
+        let roof_load = force(0.0, -15_000.0, 0.0);
         for joint in [left_apex, mid_apex, right_apex] {
             truss.set_load(joint, roof_load).expect("joint exists");
         }

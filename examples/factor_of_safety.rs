@@ -1,5 +1,4 @@
-use nalgebra::Vector3;
-use trussx::{point, Truss};
+use trussx::{force, point, Truss};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut truss = Truss::new();
@@ -8,7 +7,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let joint_b = truss.add_joint(point(1.0, 0.0, 0.0));
     truss.set_support(joint_a, [true, true, true])?;
     truss.set_support(joint_b, [false, true, true])?;
-    truss.set_load(joint_b, Vector3::new(-5_000.0, 0.0, 0.0))?;
+    truss.set_load(joint_b, force(-5_000.0, 0.0, 0.0))?;
 
     let member_ab = truss.add_member(joint_a, joint_b);
     truss.set_member_properties(member_ab, 0.005, 210.0e9)?;
