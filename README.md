@@ -13,7 +13,7 @@ Add the dependency to your `Cargo.toml`:
 
 ```toml
 [dependencies]
-trussx = "0.1"
+trussx = "0.2"
 ```
 
 ## Usage
