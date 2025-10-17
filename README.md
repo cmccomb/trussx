@@ -22,19 +22,28 @@ trussx = "0.1"
 use trussx::{force, point, Truss};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create a new truss structure
     let mut truss = Truss::new();
+
+    // Define joints
     let a = truss.add_joint(point(0.0, 0.0, 0.0));
     let b = truss.add_joint(point(1.0, 0.0, 0.0));
+
+    // Apply supports and loads
     truss.set_support(a, [true, true, true])?;
     truss.set_support(b, [false, true, true])?;
     truss.set_load(b, force(-1000.0, 0.0, 0.0))?;
 
+    // Define member between joints
     let ab = truss.add_member(a, b);
+
     // Member properties must be strictly positive to represent a physical bar.
     truss.set_member_properties(ab, 0.01, 200.0e9)?;
 
+    // Run the analysis and unwrap the result
     truss.evaluate()?;
 
+    // Retrieve and print the displacement at joint B
     let displacement = truss.joint_displacement(b).unwrap();
     println!("ux = {:.3e} m", displacement.x);
     Ok(())
