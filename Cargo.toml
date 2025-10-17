@@ -13,9 +13,9 @@ keywords = ["truss", "structural-analysis", "engineering"]
 categories = ["mathematics", "science", "simulation"]
 
 [dependencies]
-petgraph = "0.6"
-nalgebra = { version = "0.32", features = ["std"] }
-thiserror = "1.0"
+petgraph = "0.8.3"
+nalgebra = { version = "0.34.1", features = ["std"] }
+thiserror = "2.0.17"
 
 [dev-dependencies]
 approx = "0.5"
